@@ -63,7 +63,7 @@ end
 
 
 
-%% MLP without softmax
+%% MLP without softmax -> 38%
 
 net = feedforwardnet(layers);
 net.layers{1}.transferFcn = 'logsig';
@@ -82,7 +82,7 @@ figure
 plotconfusion(categorical(round(testY)),categorical(round(yHatMLP)));
 
 
-%% CNN
+%% CNN -> 99.16%
 NNLayers = [...
     imageInputLayer([28,28,1])
     convolution2dLayer(3,64)
@@ -102,18 +102,38 @@ opts = trainingOptions('sgdm', ...
     'Verbose',false, ...
     'Plots','training-progress');
 
-net = trainNetwork(XTrain,YTrain,NNLayers,opts);
+CNNnet = trainNetwork(XTrain,YTrain,NNLayers,opts);
 
-%% naive bayes
-nb = fitcnb(X(idxtt,:),Y(idxtt),'Weights',W(idxtt));
-nb = train(nb,x,labels);
+YCNN=classify(CNNnet,XTest);
+plotconfusion(YTest,YCNN);
+
+
+%% naive bayes -> 0%
+nb = fitcnb(trainX,trainY);
+Ynb = predict(nb,testX);
+% cannot work NB with MNIST(cuz variance=0)
 
 
 %% KNN
-knn = fitcknn(X,Y,'NumNeighbors',3);
+knn = fitcknn(trainX,trainY,'NumNeighbors',3);
+Yknn = predict(knn,testX);
+plotconfusion(testY,Yknn);
+
+
+%% discriminant classifier
+discriminant = fitcdiscr(trainX',trainY','discrimType', 'pseudoLinear');
+Ydiscriminant = predict(discriminant,testX');
+plotconfusion(categorical(testY'),categorical(Ydiscriminant));
+
+
+%% decision tree
+tree = fitctree(trainX,trainY);
+Ytree = predict(tree,testX);
+plotconfusion(testY,Ytree);
 
 
 %% SAE ( pretrained MLP with auto encoder )
+
 
 
 %% SVM
