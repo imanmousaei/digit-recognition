@@ -37,6 +37,7 @@ testHists = zeros(32,testN);
 %% feature extraction
 for i=1:trainN
    image = reshape(trainX(:,i), px, px)';
+   imTrain{i} = image;
    size(image);
    tmp = [];
    for j=1:px/4:px
@@ -50,6 +51,7 @@ end
 
 for i=1:testN
    image = reshape(testX(:,i), px, px)';
+   imTest{i} = image;
    size(image);
    tmp = [];
    for j=1:px/4:px
@@ -114,27 +116,87 @@ Ynb = predict(nb,testX);
 % cannot work NB with MNIST(cuz variance=0)
 
 
-%% KNN
-knn = fitcknn(trainX,trainY,'NumNeighbors',3);
-Yknn = predict(knn,testX);
-plotconfusion(testY,Yknn);
+%% KNN -> 97.1%
+knn = fitcknn(trainX',trainY','NumNeighbors',3);
+Yknn = predict(knn,testX');
+plotconfusion(categorical(testY'),categorical(Yknn));
 
 
-%% discriminant classifier
+%% discriminant classifier -> 87.3%
 discriminant = fitcdiscr(trainX',trainY','discrimType', 'pseudoLinear');
 Ydiscriminant = predict(discriminant,testX');
 plotconfusion(categorical(testY'),categorical(Ydiscriminant));
 
 
-%% decision tree
-tree = fitctree(trainX,trainY);
-Ytree = predict(tree,testX);
-plotconfusion(testY,Ytree);
+%% decision tree -> 87.8%
+tree = fitctree(trainX',trainY');
+Ytree = predict(tree,testX');
+plotconfusion(categorical(testY'),categorical(Ytree));
 
 
-%% SAE ( pretrained MLP with auto encoder )
+%% SAE ( pretrained MLP with auto encoder weights )
+[xTrainImages,tTrain] = digitTrainCellArrayData;
+hiddenSize1 = 100;
+autoenc1 = trainAutoencoder(xTrainImages,hiddenSize1, ...
+    'MaxEpochs',400, ...
+    'L2WeightRegularization',0.004, ...
+    'SparsityRegularization',4, ...
+    'SparsityProportion',0.15, ...
+    'ScaleData', false);
+view(autoenc1)
+features1 = encode(autoenc1,xTrainImages);
+
+hiddenSize2 = 50;
+autoenc2 = trainAutoencoder(features1,hiddenSize2, ...
+    'MaxEpochs',100, ...
+    'L2WeightRegularization',0.002, ...
+    'SparsityRegularization',4, ...
+    'SparsityProportion',0.1, ...
+    'ScaleData', false);
+view(autoenc2)
+features2 = encode(autoenc2,feat1);
+
+softnet = trainSoftmaxLayer(features2,tTrain,'MaxEpochs',400);
+view(softnet)
+
+view(autoenc1)
+view(autoenc2)
+view(softnet)
+
+stackednet = stack(autoenc1,autoenc2,softnet);
+view(stackednet)
+
+% Get the number of pixels in each image
+imageWidth = 28;
+imageHeight = 28;
+inputSize = imageWidth*imageHeight;
+
+% Load the test images
+[xTestImages,tTest] = digitTestCellArrayData;
+
+% Turn the test images into vectors and put them in a matrix
+xTest = zeros(inputSize,numel(xTestImages));
+for i = 1:numel(xTestImages)
+    xTest(:,i) = xTestImages{i}(:);
+end
+% Turn the training images into vectors and put them in a matrix
+xTrain = zeros(inputSize,numel(xTrainImages));
+for i = 1:numel(xTrainImages)
+    xTrain(:,i) = xTrainImages{i}(:);
+end
+
+y = stackednet(xTest);
+plotconfusion(tTest,y);
+
+% fine tuning
+stackednet = train(stackednet,xTrain,tTrain);
+y = stackednet(xTest);
+plotconfusion(tTest,y);
 
 
 
-%% SVM
 
+%% multiclass SVM
+svm = fitcecoc(trainX',trainY');
+Ysvm = predict(svm,testX');
+plotconfusion(categorical(testY'),categorical(Ysvm));
